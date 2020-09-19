@@ -1,0 +1,807 @@
+---
+title: "Conditional Expectation"
+output: html_document
+runtime: shiny
+---
+
+
+
+
+# Outline
+
+In this module, we will explore the idea of a conditional expectation from an economic and statistical point of view.  We will also explore the relationship between conditional expectations, regular (unconditional) expectations,  and probability distributions.  After completing this module, you will be able to:
+
+* Explain what a condition expectation is, and how it relates to an unconditional expectation
+* Describe why this relationship (correlation) exists and what it implies for how we think about expectations from an economic perspective
+* Understand how conditional expectations are created via conditional distributions
+* Explore the Law of Iterated Expectation and why it exists
+* Explain why how expectations (condition or otherwise) can help us understand data and economic situations
+* Analyze data using conditional expectations to explore the relationships present in the data
+
+We will do this through a series of worked applications, which ask you a series of questions.  
+
+* Write down the answers to your questions as you go.
+* Think about how they connect to the ideas outlined above.
+
+# Background - Expectation and Conditional Expectation
+
+Suppose we have two (discrete) variable $Y$, which represents years of education, and $X$, which is a qualitative variable which indicates the nationality of an individual ($i$):
+
+* $X = 1$ if the individual is a domestically born Canadian
+* $X = 2$ if the individual is an immigrant Canadian
+* $X = 3$ if the individual is a permanent resident of Canada
+* $X = 4$ if the individual is a foreign (non-permanent) resident
+
+Everyone in our data set falls into one of these four categories.  Below is a table of 1000 people surveyed in Canada:
+
+
+```{r, echo = FALSE}
+library(shiny)
+ui<- fluidPage(
+  
+tableOutput("Table2")
+
+)
+server<-function(input,output) {
+  
+  output$Table2<- renderTable({
+    
+    ###GENERATING DATA###
+library(reshape2)
+library(tidyverse)
+old_data <- NULL
+old_data$x1<-sample(c(1,1), 738, replace = TRUE)
+old_data$x2<-sample(c(2,2), 147, replace = TRUE)
+old_data$x3<-sample(c(3,3), 52, replace = TRUE)
+old_data$x4<-sample(c(4,4), 63, replace = TRUE)
+data2 <- melt(old_data, id.vars=c(x1,x2,x3,x4), value.name = "x")
+data2$L1 <-NULL
+
+#x<- sample(c(1,1,1,1,1,1,1,2,2,3,4), 1000, replace = TRUE) 
+x<- as.integer(data2$x)
+w <- abs(19-3.5*x + rnorm(1000,15,sd=3.1))
+data <- tibble(x,w)
+old_data<- NULL
+data2<- NULL 
+
+
+
+###MAKING THE TABLES####
+sum2<-
+  data %>%
+  group_by(x) %>%
+  summarize("Mean Wage" = mean(w), "SD"= sd(w), "Minimum" = min(w), "Maximum" = max(w), n = n())
+
+sum1<-
+  data %>%
+  summarize( x = "Total" ,"Mean Wage" = mean(w), "SD"= sd(w), "Minimum" = min(w), "Maximum" = max(w), n = n())
+
+sum3<-rbind(sum2,sum1)
+
+sum3
+
+})
+
+
+}
+
+shinyApp( ui=ui, server=server, options = list(height = 240, width = "100%"))
+```
+
+
+If you recall, the formula for the _expected wage_ is:
+
+$$ E[Y] = \sum_{y=0}^{\infty}yP_Y(y)$$
+
+where $P_Y$ is the probability mass function (PMF) associated with years of education; so $P_Y(y) = \text{Probability}(Y=y)$.  This is also the _population mean_ of education, sometimes written as $\mu_Y$.
+
+The _sample analogue_ of this expression is the sample mean:
+
+$$ \bar{Y} = \frac{1}{N}\sum_{i=1}^{N}y_i $$
+ 
+In the sample analogue, $\frac{1}{N}$ corresponds to $P_Y(y)$. Here, it is the probability of observing any one observation. Since there are N observations, each one is weighted equally. If a certain observation occurs frequently, it will be counted as many times as it appears.
+
+
+The _Law of Large Numbers_ tells us that if our data is representative of the population, then as $N$ becomes large, $\bar{Y}$ (the yellow line below) becomes similar to $\mu_Y$ (the red line). If the expectation of  wage $\mu_Y = 24$, then the average sample wage should become closer to $24$ as $N$ gets larger.
+
+```{r, echo = FALSE}
+###LLN DEMONSTRATION###
+library(shiny)
+ui<- fluidPage(
+  sliderInput(inputId = "N_slide",label= "Choose a value for N",min= 2,max= 120, value= 3, step = 1, ticks = FALSE),
+  plotOutput("Nplot")
+)
+server<-function(input,output) {
+  output$Nplot<- renderPlot({
+    y1 <- abs(rpois(input$N_slide,24))
+    while(input$N_slide == 3 & abs(mean(y1)-24<=4))
+    {
+      y1 <- abs(rpois(input$N_slide,24))
+    }
+    
+    y <- density(y1)
+    plot(y,  main = "Probability Density Function of Wage", xlab = "Wage", col = "navy", lwd = 2)
+    abline(v = 24, col="dark red", lwd=3)
+    abline(v = mean(y1), col="gold", lwd=3)
+  })
+}
+shinyApp( ui=ui, server=server, options = list(height = 480, width = 600))
+```
+
+
+## Conditional Expectation
+
+Closely related to regular (or unconditional) expectation is _conditional expectation_.  This looks at the expected value (or population mean) but _conditional_ on another variable being held to a certain value (or range of values).  It has the formula:
+
+$$ E[Y|X=x] = \sum_{i=0}^{\infty}y_iP_Y(y_i|X=x)$$
+
+Where $P_Y(\cdot|X=x)$ is the probability mass function (PMF) associated with years of education _conditional_ on $X = x$; so $P_Y(y|X=x) = \text{Probability}(Y=y)\text{ given } X= x$.
+
+A simple way to interpret this is to relative this is the same statistic as the unconditional expectation, but restricted to the subpopulation where the condition is true ($X = x$) in our example.  So, for example:
+
+* $E[Y]$ is the average number of years of education in the entire population
+* $E[Y|X=2]$ is the average number of years of education for immigrants
+* $E[Y|X=2 \text{ or }X=3]$ is the average number of years of education for immigrants or permanent residents
+* $E[Y|X\neq 4]$ is the average number of years of education for all non-foreign residents of Canada
+
+You can combine these in many different ways.  Just as before, conditional expectations have a sample analogue: the _conditional_ sample mean:
+
+$$ \bar{Y}|X=x = \frac{1}{N_x}\sum_{i\in S_x}^{N_x}y_i $$
+
+Where $S_x$ is the list of all people ($i$'s) where $X=x$ and $N_x$ is the size of this list. Below, you can change the number of each population that is sampled, when you change $N$ the entire table will change, as you are taking a _new_ sample.
+
+
+
+##### Choose N sampled for each residential status in Canada:
+```{r, echo = FALSE}
+library(shiny)
+ui<- fluidPage(
+  
+    sidebarLayout(
+    sidebarPanel( 
+      
+sliderInput(inputId = "slide1",label= "X = 1: Native Citizen",min= 0,max= 1000, value= 738, step = 1),
+
+sliderInput(inputId = "slide2",label= "X = 2: Immigrant Citizen",min= 0,max= 1000, value= 147, step = 1),
+
+sliderInput(inputId = "slide3",label= "X = 3: Perminant Resident",min= 0,max= 1000, value= 52, step = 1),
+
+sliderInput(inputId = "slide4",label= "X = 4: Foreign Resident",min= 0,max= 1000, value= 63, step = 1)
+
+),
+ 
+ 
+mainPanel(
+tableOutput("Table2"),
+tableOutput("Table3")
+
+)
+)
+)
+server<-function(input,output) {
+  
+  output$Table2<- renderTable({
+    
+    ###GENERATING DATA###
+library(reshape2)
+library(tidyverse)
+old_data <- NULL
+old_data$x1<-sample(c(1,1), input$slide1, replace = TRUE)
+old_data$x2<-sample(c(2,2), input$slide2, replace = TRUE)
+old_data$x3<-sample(c(3,3), input$slide3, replace = TRUE)
+old_data$x4<-sample(c(4,4), input$slide4, replace = TRUE)
+data2 <- melt(old_data, id.vars=c(x1,x2,x3,x4), value.name = "x")
+data2$L1 <-NULL
+
+#x<- sample(c(1,1,1,1,1,1,1,2,2,3,4), 1000, replace = TRUE) 
+x<- as.integer(data2$x)
+w <- abs(19-3.5*x + rnorm(input$slide1 + input$slide2 + input$slide3+ input$slide4,15,sd=3.1))
+#e <- sample(c(10,12,12,12,12,12,16,16,16,16,16,16,15,14,13,17,18,18,22,23,24), 1000, replace = TRUE)
+data <- tibble(x,w) 
+old_data<- NULL
+data2<- NULL 
+
+###MAKING THE TABLE####
+sum2<-
+  data %>%
+  group_by(x) %>%
+  summarize("Mean Wage" = mean(w), "SD"= sd(w), "Minimum" = min(w), "Maximum" = max(w), n = n())
+
+sum1<-
+  data %>%
+  summarize( x = "Total" ,"Mean Wage" = mean(w), "SD"= sd(w), "Minimum" = min(w),   "Maximum" = max(w), n = n())
+
+ sum3<-rbind(sum2,sum1)
+sum3
+})
+  
+output$Table3<- renderTable({
+library(tidyverse)
+x<- sample(c(1,1,1,1,1,1,1,2,2,3,4), input$slide1 + input$slide2 + input$slide3+ input$slide4, replace = TRUE) 
+w <- abs(19-3.5*x + rnorm(input$slide1 + input$slide2 + input$slide3+ input$slide4,15,sd=3.1))
+e <- -abs(x-2)+ 17 + rnorm(input$slide1 + input$slide2 + input$slide3+ input$slide4, 0 , sd=3)
+data <- tibble(x,e) 
+old_data<- NULL
+data2<- NULL 
+
+sum5<-
+  data %>%
+  group_by(x) %>%
+  summarize("Mean Edu" = mean(e), "SD"= sd(e), "Minimum" = min(e), "Maximum" = max(e), n = n())
+
+sum4<-
+  data %>%
+  summarize( x = "Total" ,"Mean Edu" = mean(e), "SD"= sd(e), "Minimum" = min(e),   "Maximum" = max(e), n = n())
+
+sum6<-rbind(sum5,sum4)
+sum6
+
+
+})
+}
+
+shinyApp( ui=ui, server=server, options = list(height = 460))
+```
+
+ 
+# Application 1: 
+#### Use the above to justify your answers to the following questions.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 1.1
+Politician Ronald Rump claims that allowing more non-citizens ($X=3, X=4$) to live and work in Canada will lower the average wage in Canada. Is this true? Why or why not.
+
+#### Answer 1.1
+Yes, this is true as long as those immigrants would earn less than the average wage. That is because $X=3, X=4$ type immigrants would be making up a larger share of the population, but the _conditional_ mean wage of those immigrants would be lower still.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 1.2
+The politician claims further that this means more immigration means lower wages for native-born Canadians. Is this true?
+
+#### Answer 1.2
+No, in this analysis the mean wages for each group remain the same as $X=3, X=4$ type immigrants increase. So in is not true that more immigrants would result in lower wages for any group.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 1.3
+Explain how increasing the number of non-citizen immigrants can decrease the average wage in Canada overall, without decreasing the average wage for native-born Canadians.
+
+#### Answer 1.3
+Because immigrants would be making up a larger portion of the whole population, and the conditional expected wage of immigrants is lower, the mean wage would decrease. This analysis still makes sense even when the conditional expected wage of the other groups is unchanged.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 1.4
+Another politician wants to allow more immigrants to come to Canada. She notes that immigrant Canadians (group $X=2$) have the highest level of average education. Since most immigrants to Canada come from India, China, the Philippines, Nigeria, or the United States, she claims that on average, citizen of those countries must be more highly educated than Canadians. Is this true? What is another reason immigrant Canadians might be more highly educated than native-born Canadians?
+
+#### Answer 1.4
+This is not necessarily true. Immigrant Canadians were able to gain Canadian citizenship perhaps in part because of their higher educational status. What might be true is that conditional on being eligible for Canadian Citizenship, those individuals have a higher mean wage than those who are not eligible.
+
+
+# Application 2: Healthy Canada
+The Canadian Government is looking to reduce it's expenditure on health care without increasing taxes or decreasing the services it provides to patients. This is only possible if the residents of BC become healthier. A task force is assembled to create a public service campaign discouraging a particular unhealthy behavior.
+
+The task force knows that the following 4 behaviors result in extra health care spending, but they can only choose one to combat in the campaign. 
+
+* Smoking Cigarettes 
+* Drinking Alcohol 
+* Taking illegal Drugs
+* Driving over the speed limit 
+
+## Part 1:
+In order to understand the extent of these behaviors in Canada, they review a representative survey of 100,000 Canadians. The below table describes the fraction on Canadians engaging in each behavior and the extra expected lifetime spending for each behavior. 
+
+```{r, echo=FALSE, warning=FALSE, message= FALSE}
+###GENERATING DATA FOR APPLICATION 2###
+library(tidyverse)
+
+Behavior<-c("Smoking","Drinking","Drugs","Speeding")
+at<- c(.6,1.9,3.1,4.4)
+prob<- c(.15,.75,.04,.97)
+exp<- c(100000,40000,150000,30000)
+exp<-as.integer(exp)
+p_d<- c(0.2,0.3,0.1,0.4)
+from<- prob*exp*3
+ylim<-c(0,+100000)
+data2<- tibble(Behavior, prob, exp, p_d, from)
+data3<-tibble(Behavior, from)
+```
+
+
+```{r, echo = FALSE, warning= FALSE, message= FALSE}
+###STATIC TABLE###
+library(shiny)
+ui<- fluidPage(
+  
+  tableOutput("tab")
+  
+)
+server<-function(input,output) {
+  output$tab<- renderTable({
+   library(tidyverse)
+
+sum<-
+  data2 %>%
+  group_by(Behavior) %>%
+  summarize("Fraction Engaging " = prob, "Extra Spending"= exp)
+
+sum
+    
+  })
+}
+shinyApp( ui=ui, server=server, options = list(height = 200, width = 600))
+
+```
+
+In the bar graph below, you can see how much each behavior contributes to expected spending for all of Canada.
+
+```{r, echo = FALSE, warning= FALSE}
+###STATIC BAR GRAPH###
+library(shiny)
+ui<- fluidPage(
+  plotOutput("bar")
+  )
+  
+server<-function(input,output) {
+  
+output$bar<- renderPlot({
+
+bar<- barplot(from, xlab="Unhealthy Behavior", ylab="Extra Spending (tens of Millions CAD)", ylim = ylim, main = "Behavior Contribrution to Healthcare spending", col= "coral3")
+  axis(1, at = at, labels=Behavior)
+  text(bar, y = from, label = from, pos = 3, cex = 1.2, col = "navy")
+  format(bar, scientific = FALSE)
+  options(scipen = 999)
+
+  })
+}
+
+shinyApp(ui=ui, server=server, options = list(width = 600))
+```
+
+
+Someone who engages in none of the the above behaviors has an expected lifetime health cost $C$ of 200,000 CAD. The following is an expression for average cost per person:
+
+$$\bar{C} = 200,000 + .15 (100,000)+.75 (75,000)+.04 (150,000)+.97(15,000)$$
+
+Total health care spending is the average cost times the total population. (Approximated here by 30,000,000). The spending contribution of each behavior is the fraction engaging times the expected cost times the population.
+
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 2.1
+What is the expected health cost for an individual who drinks alcohol, but engages in none of the other behaviors?
+
+#### Answer 2.1
+The expected cost would be $200,000 + 75,000 = 275,000$ dollars.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 2.2
+What is the expected health cost for an individual who engages in all of the behaviors?
+
+#### Answer 2.2
+Here the expected cost would be $200,000 + 100,000 + 75,000 + 150,000 +30,000 = 50,500$ dollars.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.3
+What activity is the most costly to the government? What behavior is the most costly for an individual? Why are they not the same?
+
+#### Answer 2.3
+The behavior most costly to the individual is illegal drugs, which increase the expected health care cost of an individual by ($150,000$). However, the activity that is most costly to the government is alcohol. This is because most of the population (75%) is consuming alcohol, and it is still very costly per person (if not the most). However, a much lower percentage (4%) are consuming illegal drugs. So even thought it is the most expesive per individual, it is not the biggest source of government spending.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.4
+Assume the campaign will have a uniform effect the behaviors. If a campaign will reduce the number of people engaging in any behavior by 10%, which one should the task force choose to target? 
+
+#### Answer 2.4
+Because the government is spending the most on alcohol, targeting this behavior would save the most money.
+
+
+
+## Part 2:
+##### Choose parameters for fraction of the population enganging in each Behavior and the expected lifetime cost of engaging in each behavior.
+
+```{r, echo= FALSE}
+### INTERACTIVE BAR GRAPH AND TABLE ###
+library(shiny)
+
+ui<- fluidPage(
+  
+  sidebarLayout(
+      
+    sidebarPanel(
+      
+      h5("Choose the fraction of the population engaging in each behavior:"),
+sliderInput(inputId = "frac_c",label= "Proportion Smoking",min= 0,max= 1, value= .15, step = .05, ticks = FALSE),
+sliderInput(inputId = "frac_a",label= "Proportion Drinking Alcohol",min= 0,max= 1, value= .75, step = .05, ticks =   FALSE),
+sliderInput(inputId = "frac_d",label= "Proportion using Drugs",min= 0,max= 1, value= .04, step = .05, ticks =   FALSE),
+sliderInput(inputId = "frac_s",label= "Proportion Speeding",min= 0,max= 1, value= .97, step = .05, ticks =   FALSE),
+
+     h5("Choose the lifetime expected cost of engaging in each behavior:"),
+sliderInput(inputId = "cost_c",label= "Lifetime Cost of Smoking",min= 0,max= 200000, value= 100000, step = 100, ticks = FALSE),
+sliderInput(inputId = "cost_a",label= "Lifetime Cost of Alcohol",min= 0,max= 200000, value= 40000, step = 100, ticks = FALSE),
+sliderInput(inputId = "cost_d",label= "Lifetime Cost of Drugs",min= 0,max= 200000, value= 150000, step = 100, ticks = FALSE),
+sliderInput(inputId = "cost_s",label= "Lifetime Cost of Speeding",min= 0,max= 200000, value= 30000, step = 100, ticks = FALSE),
+
+   ),
+  
+mainPanel(
+  
+  tableOutput("tab"),
+  plotOutput("bar")
+  
+  )
+  ))
+
+server<-function(input,output) {
+
+  
+output$bar<- renderPlot({
+
+library(tidyverse)
+
+Behavior<-c("Smoking","Drinking","Drugs","Speeding")
+at<- c(.6,1.9,3.1,4.4)
+prob<- c(input$frac_c,input$frac_a,input$frac_d,input$frac_s)
+exp<- c(input$cost_c, input$cost_a, input$cost_d, input$cost_s)
+exp<-as.integer(exp)
+from<- prob*exp*3
+ylim<-c(0,40000+max(from))
+data2<- tibble(Behavior, prob, exp, from)
+data3<-tibble(Behavior, from)
+
+
+bar<- barplot(from, xlab="Unhealthy Behavior", ylab="Extra Spending (tens of Millions CAD)", ylim = ylim, main = "Behavior Contribrution to Healthcare spending", col= "coral3")
+  axis(1, at = at, labels=Behavior)
+  text(bar, y = from, label = from, pos = 3, cex = 1.2, col = "navy")
+  format(bar, scientific = FALSE)
+  options(scipen = 999)
+
+
+  })
+
+output$tab<- renderTable({
+library(tidyverse)
+library(pracma)
+Behavior<-c("Smoking","Drinking","Drugs","Speeding")
+at<- c(.6,1.9,3.1,4.4)
+prob<- c(input$frac_c,input$frac_a,input$frac_d,input$frac_s)
+exp<- c(input$cost_c, input$cost_a, input$cost_d, input$cost_s)
+exp<-as.integer(exp)
+p_d<- c(0.2,0.3,0.1,0.4)
+data_tab<- tibble(Behavior, prob, exp, p_d)
+
+sum<-
+  data_tab %>%
+  group_by(Behavior) %>%
+  summarize("Percent Engaging " = prob, "Extra Spending"= exp)
+
+sum
+
+})
+}
+
+shinyApp(ui=ui, server=server, options = list(height = 850))
+```
+
+Continue with the assumption that a campaign will decrease speeding by 10%, and all other behaviors by 5%. Use the interactive graph and table above to answer the following questions chronologically:
+
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.5
+Of course, it is very likely that the response to the campaign would not have a uniform effect, but rather depend on the behavior that's being targeted. For example, some of the behaviors, such as smoking, alcohol, or drugs can be addictive, so a campaign may be less able to discourage them.
+
+If a campaign targeted toward speeding could decrease the number of people who speed by 10%, and a campaign targeted towards the other more addictive behaviors decreases the number of people smoking, drinking, or doing drugs by 5%, what activity should the task force target? Why?
+
+#### Answer 2.5
+Doing the calculations reveals that a 10% reduction in the number of people who speed would save the government more than a 5% reduction in any one of the other behaviors. So in this case they should target speeding.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.6
+Say cars become significantly safer so that the expected lifetime cost of someone who speeds is only $12,000 extra (instead of 30,000). Which behavior should the task force target now? Why?
+
+#### Answer 2.6
+Now a 5% decrease in the number of people who consume alcohol will save the government more than a 10% in the number of people who speed. So in this case the taskforce should target alcohol.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.7
+Consider a fall in the cost of cigarettes that increases the number of people who smoke to 25% of the whole population.
+Which behavior should the task force target now? Why?
+
+#### Answer 2.7
+This is still not enough to make smoking the most expensive behavior, so the task force should still target alcohol.
+
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.8
+Approximately what percentage of people would have to do drugs in order to make it the most expensive behavior for the government?
+
+#### Answer 2.8
+If more than only 20% if people used drugs it would be the most expensive behavior to the government.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 2.9
+Explain how the change of conditional expectation of health costs is important for the task force to understand.
+
+#### Answer 2.9
+In this example, the task force is concerned with the unconditional expectation of total health costs. It is important for them to understand how the conditional expectation of health cost for people engaging in different behaviors is affecting the whole. Because they need to target one behavior in particular, they need to know how the expected cost of each behavior affects the unconditional expectation of health costs.
+
+
+
+
+
+
+# Application 2: Restaurant Management
+
+Congratulations, you have just inherited a sushi restaurant from a deceased uncle you didn't even know you had. Unfortunately, your uncle didn't leave any instructions behind on how to run the restaurant. You do know that the cost to you for each type of roll is 5 dollars, and the restaurant only offers 4 menu items which all cost 10 dollars:
+
+* Avocado Roll
+* Spicy Tuna Roll
+* Spicy Salmon Roll
+* California Roll
+
+### Week 1
+Each day you need to order fresh ingredients, but you are not sure how much of each ingredient to order. Because you have only limited information, the first week you order 50 of every type of ingredient. Because you want the sushi to be fresh you cannot keep the ingredients from day to day.
+
+
+You know that profit for each day is the $Profit = revenue - costs$. So the profit function for Monday looks like this:
+
+$$ \pi_{Monday} =  price_{roll}*q_{sold}-cost_{roll}*q_{ordered}$$
+Let's expand the function to include the items individually, Where t stands for Tuna, s for Salmon, a for Avocado, and c for California.
+
+$$\pi_{Monday} =  price(t)*q(t)_{sold}-cost(t)*q(t)_{ordered} + price(s)*q(s)_{sold}-cost(s)*q(s)_{ordered} +price(a)*q(a)_{sold}-cost(a)*q(a)_{ordered} +price(c)*q(c)_{sold}-cost(c)*q(c)_{ordered}$$
+Because you have only limited information, the first week you order 50 of every type of ingredient. 
+
+
+
+
+```{r, echo=FALSE}
+###MAKE DATA###
+library(tidyverse)
+Day<- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+t<- c(40,60,70,20,90)
+t<- as.integer(t)
+s<- c(10,100,40,80,50)
+s<- as.integer(s)
+a<- c(100,50,30,90,10)
+a<- as.integer(a)
+c<- c(50,50,50,100,10)
+c<- as.integer(c)
+price<- c(10,10,10,10,10)
+cost<- c(5,5,5,5,5)
+ordered<- c(50,50,50,50,50)
+week1<-tibble(Day,a,t,s,c, price,cost,ordered)
+
+###Interactive Profit Function Attempt###
+library(shiny)
+ui <- fluidPage(
+  
+  fluidRow(style = "background-color: aliceblue",
+    column(4,offset = 1, sliderInput(inputId = "tuna_monday",label= "Tuna for Monday",min= 0,max= 200, value= 50, step = 1, ticks = FALSE), sliderInput(inputId = "salmon_monday",label= "Salmon for Monday",min= 0,max= 200, value= 50, step = 1, ticks = FALSE)),
+    
+    column(4, offset = 1, sliderInput(inputId = "avo_monday",label= "Avocado for Monday",min= 0,max= 200, value= 50, step = 1, ticks = FALSE), sliderInput(inputId = "cal_monday",label= "California for Monday",min= 0,max= 200, value= 50, step = 1, ticks = FALSE),
+  )
+),
+  
+#withMathJax(),
+  #tabPanel(
+    #title = "Diagnostics", 
+    #h4(textOutput("diagTitle")),
+    #uiOutput("eq1") ),
+ 
+
+  p("The price for each roll is 10 and the cost for each roll is 5, so we can substitute these values into the eqation below:"),
+   withMathJax(),
+  tabPanel(
+    title = "Diag", 
+    h4(textOutput("diagT")),
+    uiOutput("eq2")
+  ),
+  
+  p("The one thing you can choose is the quantity of each item you order each day, the following subs in the values for how much you order in the first week. You can use the sliders above to see how your profit changes with the amount of each ingredient you order."),
+  
+   withMathJax(),
+  tabPanel(
+    title = "D", 
+    h4(textOutput("dT")),
+    uiOutput("eq3")
+    
+  ))
+
+server<-function(input,output, session) {
+  output$eq1<- renderUI({
+    
+  value <- min(week1[1,3], input$tuna_monday)*10 - input$tuna_monday*5 + min(week1[1,4], input$salmon_monday)*10 - input$salmon_monday*5 + min(week1[1,2], input$avo_monday)*10 - input$avo_monday*5+min(week1[1,5], input$cal_monday)*10 - input$cal_monday*5
+    
+    withMathJax(paste0("Profit on Monday: $$price(t)*q(t)_{sold}-cost(t)*q(t)_{ordered} + price(s)*q(s)_{sold}-cost(s)*q(s)_{ordered} +price(a)*q(a)_{sold}-cost(a)*q(a)_{ordered} +price(c)*q(c)_{sold}-cost(c)*q(c)_{ordered} =", value,"$$"))
+     })
+  
+  output$eq2<- renderUI({
+  value <- min(week1[1,3], input$tuna_monday)*10 - input$tuna_monday*5 + min(week1[1,4], input$salmon_monday)*10 - input$salmon_monday*5 + min(week1[1,2], input$avo_monday)*10 - input$avo_monday*5+min(week1[1,5], input$cal_monday)*10 - input$cal_monday*5
+  withMathJax(paste0("Profit on Monday: $$10*q(t)_{sold}-5*q(t)_{ordered} + 10*q(s)_{sold}-5*q(s)_{ordered} +10*q(a)_{sold}-5*q(a)_{ordered} +10*q(c)_{sold}-5*q(c)_{ordered} ", "=", value,"$$"))
+     })
+  
+   output$eq3<- renderUI({
+    value <- min(week1[1,3], input$tuna_monday)*10 - input$tuna_monday*5 + min(week1[1,4], input$salmon_monday)*10 - input$salmon_monday*5 + min(week1[1,2], input$avo_monday)*10 - input$avo_monday*5+min(week1[1,5], input$cal_monday)*10 - input$cal_monday*5
+  withMathJax(paste("$$10*q(t)_{sold}-5*", input$tuna_monday,"+ 10*q(s)_{sold}-5*", input$salmon_monday, "+10*q(a)_{sold}-5*", input$avo_monday, "+10*q(c)_{sold}-5*" , input$cal_monday , "=", value,"$$"))
+     })
+  
+  
+}
+
+
+shinyApp( ui=ui, server=server, options = list(height = 350, width = 1000))
+
+```
+
+In the first week, because you ordered 50 of each ingredient  $q_{sold} = min\{q_{demanded}, 50\}$. Even though you were unable to sell more of an item than you ordered, you still record how many people tried to order a certain item. After the first week you collect the following data for each day of the week.
+
+```{r, echo=FALSE}
+###Static Table1###
+library(shiny)
+ui<- fluidPage(
+  
+  tableOutput("tab")
+  
+)
+server<-function(input,output) {
+  output$tab<- renderTable({
+   library(tidyverse)
+Day<- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+
+t<- c(40,60,70,20,90)
+t<- as.integer(t)
+s<- c(10,100,40,80,50)
+s<- as.integer(s)
+a<- c(100,50,30,90,10)
+a<- as.integer(a)
+c<- c(50,50,50,100,10)
+c<- as.integer(c)
+data<-tibble(Day,a,t,s,c)
+
+sum<-
+  data %>%
+  group_by(Day) %>%
+  summarize("Avocado Rolls" = a, "Spicy Tuna Rolls"= t, "Spicy Salmon Rolls" = s, "California Rolls" = c)
+
+sum
+    
+  })
+}
+shinyApp( ui=ui, server=server, options=list(hight = 200))
+
+```
+
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.1
+Next week should you order 50 or each ingredient for each day again? Why or why not?
+
+#### Answer 3.1
+No, you should not. Now you have some data for how much of each item is demanded each day.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.2
+What happens to your profit if you order too little of an ingredient? What happens if you order too much? Explain.
+
+#### Answer 3.2
+In both cases the profit decreases. If you order too little you are not able to sell as much as is demanded, so you lose profit. If you order too much, you pay for ingredients that you can never sell, so again, profit decreases.
+
+### {.tabset .tabset-fade .tabset-pills}
+  
+#### Question 3.3
+What was the Maximum amount of profit you could have made on Monday had you ordered the exact number of ingredients you needed?
+
+#### Answer 3.3
+Had you ordered the exact number of ingredients you needed, you could have made $1000 dollars on Monday.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.4
+After the first week, conditional on it being a Monday, how much of each of the four ingredients should you order? 
+
+#### Answer 3.4
+Conditional on it being on Monday you should order enough for 100 avocado rolls, 40 tuna rolls, 10 salmon rolls and 50 California rolls.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.5
+Explain your answer to Question 3.4. What values are you trying to approximate?
+
+#### Answer 3.5
+You only have one data point for each item on the first Monday, so you should use those to approximate the conditional (on it being a Monday) expectation of the number of each item that will be ordered
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.6
+What is the profit function for the entire week in terms of profit from each day.
+
+#### Answer 3.6
+Profit for the entire week is just the sum of profits for each day. So $$\pi_{week}=\pi_{m}+\pi_{t}+ \pi_{w}+ \pi_{th}+\pi_{f} $$
+
+
+
+### Week 2
+
+Suppose you keep track of how much people order on each day in Week 2, as shown in the table below:
+
+
+```{r, echo=FALSE}
+###Static Table2###
+library(shiny)
+ui<- fluidPage(
+  
+  tableOutput("tab")
+  
+)
+server<-function(input,output) {
+  output$tab<- renderTable({
+   library(tidyverse)
+Day<- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+
+t<- c(51,40,63,29,85)
+t<- as.integer(t)
+s<- c(14,110,67,66,54)
+s<- as.integer(s)
+a<- c(91,46,38,84,19)
+a<- as.integer(a)
+c<- c(55,59,60,92,8)
+c<- as.integer(c)
+week2<-tibble(Day,a,t,s,c)
+
+sum<-
+  week2 %>%
+  group_by(Day) %>%
+  summarize("Avocado Rolls" = a, "Spicy Tuna Rolls"= t, "Spicy Salmon Rolls" = s, "California Rolls" = c)
+
+sum
+    
+  })
+}
+shinyApp( ui=ui, server=server, options = list(height = 270, width = 600))
+
+```
+
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.7
+For the third week, should you order the same way you did for the second week? Why or why not?
+
+#### Answer 3.7
+No, now you have even more information (two data points for each day), so you should use it to improve your ordering.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.8
+After the second week, conditional on it being a Tuesday, how much of each of the four ingredients should you order?
+
+#### Answer 3.8
+You should take the average of the two weeks. So, conditional on it being on Tuesday you should order enough for 48 avocado rolls, 50 tuna rolls, 105 salmon rolls and 54-55 California rolls.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.9
+What value are you trying to approximate in Question 3.8? Explain why you used the approximation you did.
+
+#### Answer 3.9
+Because you are trying to approximate the conditional expectation, should use the average.
+
+### {.tabset .tabset-fade .tabset-pills}
+
+#### Question 3.10
+Each week, how will you update your approximation?
+
+#### Answer 3.10
+Each week you should use the average demand for each item on each day to determine how much to order. After every week you're collecting another data point, so your approximation of the conditional demand should become more and more accurate.
